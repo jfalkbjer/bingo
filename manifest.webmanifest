@@ -1,0 +1,25 @@
+{
+  "name": "Rim-bingo",
+  "short_name": "Rim-bingo",
+  "description": "Rim-bingo för klassrummet. Visa en bild i taget och skriv ut unika brickor.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#fff8f1",
+  "theme_color": "#e85d04",
+  "lang": "sv",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
