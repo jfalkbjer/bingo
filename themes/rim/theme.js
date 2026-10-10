@@ -2,6 +2,10 @@ window.BINGO_THEMES = window.BINGO_THEMES || [];
 window.BINGO_THEMES.push({
   id: "rim",
   title: "Rimord",
+  heading: "Rim-bingo",
+  lead: "Barnen har en bricka med rimord. Du visar en bild, till exempel en katt, och de letar efter ordet som rimmar: hatt.",
+  hint: "Tryck på bilden, pilarna eller mellanslag för nästa. Pil vänster går tillbaka. T visar ordet på den stora bilden.",
+  printLead: "Varje bricka får samma 25 rimord, men i en egen ordning. Först med fem i rad vinner. Utskriften lägger två brickor på varje ark.",
   base: "themes/rim/",
   pairs: [
     { id: "katt", call: "katt", card: "hatt", image: "katt.png", cardImage: "hatt.png" },

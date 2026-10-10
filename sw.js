@@ -1,12 +1,17 @@
-var CACHE = "rim-bingo-v9";
+var CACHE = "rim-bingo-v11";
 var PRECACHE = [
   "./",
   "./index.html",
   "./css/app.css",
   "./js/bingo.js",
+  "./js/sound.js",
   "./js/app.js",
   "./themes/registry.js",
   "./themes/rim/theme.js",
+  "./themes/halloween/theme.js",
+  "./themes/halloween/pumpa.png",
+  "./themes/halloween/spoke.png",
+  "./themes/halloween/katt.png",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-192.png",

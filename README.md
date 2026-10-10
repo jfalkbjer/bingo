@@ -19,9 +19,22 @@ En bild i taget på projektorn, och en egen bricka med rimord till varje barn. A
 
 Nya brickor är alltid en ny blandning. Det går inte att ta fram samma brickor igen.
 
+## Halloween-bingo
+
+Välj temat **Halloween** i menyn. Det finns tre bilder: pumpa, spöke och katt. Varje bild kan komma med ett tal från 1 till 10, så det finns 30 kombinationer. Varje omgång drar alla 30, en i taget, och ingen kommer två gånger.
+
+1. Två hjul snurrar som på en enarmad bandit. Talet stannar först, sedan bilden, till exempel 4 och en pumpa.
+2. Nästa: tryck på hjulen, på pilen till höger, på mellanslag eller på Enter. Trycker du medan hjulen snurrar stannar de direkt. Tillbaka visar förra dragningen utan att snurra.
+3. Varje bricka har 25 av de 30 kombinationerna. En ruta visar bilden så många gånger som talet, till exempel fyra pumpor. Det står inget tal i rutan, barnen räknar.
+4. **Dragna** eller **D** visar vad som har dragits hittills: varje bild följd av sina tal i ordning. Använd den när någon ropar bingo. **Fortsätt** eller **Esc** stänger, och spelet fortsätter där det var.
+5. **Ny omgång** fungerar när som helst och frågar en gång till.
+6. Medan hjulen snurrar spelas ett spöklikt ljud. Ljudet tystnar när hjulen stannar. **Ljud på** eller **M** stänger av ljudet, och valet sparas till nästa gång.
+
+Halloween-brickorna skrivs ut en per ark, så att bilderna blir stora nog att räkna. Det finns inget lärarblad för Halloween, eftersom **Dragna** gör samma jobb.
+
 ## Utskrift och lärarblad
 
-På **Skriv ut brickor** väljer du hur många brickor, från 1 till 60. Från början är det 24. **Skapa brickor** ger varje barn en egen blandning. Finns det redan brickor frågar knappen en gång till innan de byts ut.
+På **Skriv ut brickor** väljer du hur många brickor, från 1 till 60. Från början är det 24. **Skapa brickor** ger varje barn en egen blandning. Om du ändrar antalet efteråt läggs nya brickor till, eller så tas de sista bort, och de andra ligger kvar. **Skriv ut brickor** skriver alltid ut så många som står i rutan. Vill du blanda om alla trycker du **Skapa brickor** igen. Knappen frågar en gång till innan brickorna byts ut.
 
 **Skriv ut brickor** skriver ut bara brickorna, två per ark. Klipp pappret på mitten, så blir varje halva en bricka. Ett ojämnt antal lämnar den sista halvan tom.
 
@@ -39,6 +52,10 @@ På **Skriv ut brickor** väljer du hur många brickor, från 1 till 60. Från b
 ```
 
 5. Om sidan ligger på https, lägg de nya filerna i listan i `sw.js` och byt namnet på `CACHE` så att webbläsaren hämtar dem på nytt.
+
+`heading`, `lead`, `hint` och `printLead` är texterna i menyn och på utskriftssidan.
+
+Ett tema med hjul, som `themes/halloween`, har `kind: "slot"` och inga `pairs`. Det har i stället `numbers: { min: 1, max: 10 }` och minst tre `symbols`, där varje bild har `id`, `name` och `image`. Tal gånger bilder måste bli minst 25 kombinationer. `sound: "halloween"` ger ljud när hjulen snurrar. Ljuden skapas i `js/sound.js`, och temat kan utelämna `sound` för att vara tyst.
 
 ## Cloudflare Pages
 
