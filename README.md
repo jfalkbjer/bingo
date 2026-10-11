@@ -32,9 +32,21 @@ Välj temat **Halloween** i menyn. Det finns tre bilder: pumpa, spöke och katt.
 
 Halloween-brickorna skrivs ut en per ark, så att bilderna blir stora nog att räkna. Det finns inget lärarblad för Halloween, eftersom **Dragna** gör samma jobb.
 
+## Sammansatta ord
+
+Välj temat **Sammansatta ord** i menyn. Två ord blir ett nytt ord, till exempel brand och bil blir brandbil. Det finns 25 ord.
+
+1. På skärmen ligger två kort med baksidan upp, med ett plus emellan. Först vänds det vänstra kortet, sedan det högra, som i memory. Då syns till exempel en brand och en bil.
+2. Barnen letar efter det sammansatta ordet på brickan. Rutan har bilden och ordet, till exempel en brandbil och BRANDBIL.
+3. Nästa: tryck på korten, på pilen till höger, på mellanslag eller på Enter. Trycker du medan korten vänds blir de klara direkt. Tillbaka visar förra paret utan att vända korten.
+4. **T** eller **Visa ordet** visar de två orden, till exempel BRAND + BIL, men inte svaret.
+5. Paren som redan visats ligger längst ner, med de två små bilderna bredvid varandra.
+
+När ett kort vänds hörs ett kortljud. Hoppar du över vändningen tystnar ljudet. **Ljud på** eller **M** stänger av ljudet, och valet sparas till nästa gång. Det gäller också Halloween. Brickorna skrivs ut två per ark, som rimorden. Lärarbladet visar varje rad som bild och ord, plus, bild och ord, lika med bilden och ordet på brickan. Då är det lätt att se att bilderna stämmer.
+
 ## Utskrift och lärarblad
 
-På **Skriv ut brickor** väljer du hur många brickor, från 1 till 60. Från början är det 24. **Skapa brickor** ger varje barn en egen blandning. Om du ändrar antalet efteråt läggs nya brickor till, eller så tas de sista bort, och de andra ligger kvar. **Skriv ut brickor** skriver alltid ut så många som står i rutan. Vill du blanda om alla trycker du **Skapa brickor** igen. Knappen frågar en gång till innan brickorna byts ut.
+På **Skriv ut brickor** väljer du hur många brickor, från 1 till 60. Från början är det 30. **Skapa brickor** ger varje barn en egen blandning. Om du ändrar antalet efteråt läggs nya brickor till, eller så tas de sista bort, och de andra ligger kvar. **Skriv ut brickor** skriver alltid ut så många som står i rutan. Vill du blanda om alla trycker du **Skapa brickor** igen. Knappen frågar en gång till innan brickorna byts ut.
 
 **Skriv ut brickor** skriver ut bara brickorna, två per ark. Klipp pappret på mitten, så blir varje halva en bricka. Ett ojämnt antal lämnar den sista halvan tom.
 
@@ -51,11 +63,13 @@ På **Skriv ut brickor** väljer du hur många brickor, från 1 till 60. Från b
 <script src="themes/jul/theme.js"></script>
 ```
 
-5. Om sidan ligger på https, lägg de nya filerna i listan i `sw.js` och byt namnet på `CACHE` så att webbläsaren hämtar dem på nytt.
+5. Om sidan ligger på https, lägg temats `theme.js` i listan `THEMES` i `sw.js` och byt namnet på `CACHE` så att webbläsaren hämtar filerna på nytt. Bilderna läses från temat, så de behöver inte skrivas in.
 
 `heading`, `lead`, `hint` och `printLead` är texterna i menyn och på utskriftssidan.
 
 Ett tema med hjul, som `themes/halloween`, har `kind: "slot"` och inga `pairs`. Det har i stället `numbers: { min: 1, max: 10 }` och minst tre `symbols`, där varje bild har `id`, `name` och `image`. Tal gånger bilder måste bli minst 25 kombinationer. `sound: "halloween"` ger ljud när hjulen snurrar. Ljuden skapas i `js/sound.js`, och temat kan utelämna `sound` för att vara tyst.
+
+Ett tema med sammansatta ord, som `themes/sammansatta`, har `kind: "compound"` och exakt 25 `pairs`. Varje par har `id`, `first` och `second` (de två orden som visas), `firstImage` och `secondImage` (deras bilder), samt `card` och `cardImage` för ordet och bilden på brickan. Samma delord får användas i flera par, till exempel sol och bil. Varje `id` och varje `card` måste vara unikt. `sound: "flip"` ger ett kortljud när korten vänds. Utan `sound` är temat tyst.
 
 ## Cloudflare Pages
 

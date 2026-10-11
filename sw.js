@@ -1,4 +1,13 @@
-var CACHE = "rim-bingo-v11";
+var CACHE = "rim-bingo-v14";
+var THEMES = [
+  "./themes/rim/theme.js",
+  "./themes/halloween/theme.js",
+  "./themes/sammansatta/theme.js"
+];
+
+self.window = self;
+importScripts.apply(null, ["./js/bingo.js", "./themes/registry.js"].concat(THEMES));
+
 var PRECACHE = [
   "./",
   "./index.html",
@@ -7,68 +16,19 @@ var PRECACHE = [
   "./js/sound.js",
   "./js/app.js",
   "./themes/registry.js",
-  "./themes/rim/theme.js",
-  "./themes/halloween/theme.js",
-  "./themes/halloween/pumpa.png",
-  "./themes/halloween/spoke.png",
-  "./themes/halloween/katt.png",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",
   "./fonts/nunito-400.woff2",
-  "./fonts/nunito-700.woff2",
-  "./themes/rim/katt.png",
-  "./themes/rim/mus.png",
-  "./themes/rim/bil.png",
-  "./themes/rim/sol.png",
-  "./themes/rim/ko.png",
-  "./themes/rim/bok.png",
-  "./themes/rim/boll.png",
-  "./themes/rim/hand.png",
-  "./themes/rim/mas.png",
-  "./themes/rim/far.png",
-  "./themes/rim/tag.png",
-  "./themes/rim/docka.png",
-  "./themes/rim/flagga.png",
-  "./themes/rim/svan.png",
-  "./themes/rim/sten.png",
-  "./themes/rim/ros.png",
-  "./themes/rim/gris.png",
-  "./themes/rim/sang.png",
-  "./themes/rim/anka.png",
-  "./themes/rim/napp.png",
-  "./themes/rim/ballonger.png",
-  "./themes/rim/agg.png",
-  "./themes/rim/paket.png",
-  "./themes/rim/fyra.png",
-  "./themes/rim/byxa.png",
-  "./themes/rim/hatt.png",
-  "./themes/rim/hus.png",
-  "./themes/rim/pil.png",
-  "./themes/rim/stol.png",
-  "./themes/rim/sko.png",
-  "./themes/rim/krok.png",
-  "./themes/rim/troll.png",
-  "./themes/rim/tand.png",
-  "./themes/rim/las.png",
-  "./themes/rim/tar.png",
-  "./themes/rim/sag.png",
-  "./themes/rim/klocka.png",
-  "./themes/rim/vagga.png",
-  "./themes/rim/gran.png",
-  "./themes/rim/ren.png",
-  "./themes/rim/nos.png",
-  "./themes/rim/is.png",
-  "./themes/rim/ang.png",
-  "./themes/rim/planka.png",
-  "./themes/rim/knapp.png",
-  "./themes/rim/kalsonger.png",
-  "./themes/rim/skagg.png",
-  "./themes/rim/raket.png",
-  "./themes/rim/myra.png",
-  "./themes/rim/yxa.png"
-];
+  "./fonts/nunito-700.woff2"
+].concat(THEMES);
+
+self.BINGO_THEMES.forEach(function (theme) {
+  self.Bingo.themeImages(theme).forEach(function (image) {
+    PRECACHE.push("./" + self.Bingo.imagePath(theme, image));
+  });
+});
 
 self.addEventListener("install", function (event) {
   event.waitUntil(

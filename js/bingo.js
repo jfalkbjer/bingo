@@ -47,6 +47,35 @@
     return !!theme && theme.kind === "slot";
   }
 
+  function isCompound(theme) {
+    return !!theme && theme.kind === "compound";
+  }
+
+  function imagePath(theme, image) {
+    return theme.base.replace(/\/?$/, "/") + image;
+  }
+
+  function themeImages(theme) {
+    var images = [];
+    var seen = {};
+    function add(image) {
+      if (image && !seen[image]) {
+        seen[image] = true;
+        images.push(image);
+      }
+    }
+    (theme.pairs || []).forEach(function (pair) {
+      add(pair.image);
+      add(pair.firstImage);
+      add(pair.secondImage);
+      add(pair.cardImage);
+    });
+    (theme.symbols || []).forEach(function (symbol) {
+      add(symbol.image);
+    });
+    return images;
+  }
+
   function slotCombos(theme) {
     var combos = [];
     var min = theme.numbers.min;
@@ -61,11 +90,43 @@
     return combos;
   }
 
-  function validateSlotTheme(theme) {
-    var errors = [];
+  function checkBasics(theme, errors) {
     if (!theme.id || !theme.title || !theme.base) {
       errors.push("Temat saknar id, namn eller sökväg till bilderna.");
     }
+  }
+
+  var ID = { key: "id", label: "Id" };
+  var CALL = { key: "call", label: "Bildordet" };
+  var CARD = { key: "card", label: "Brickordet" };
+
+  function checkItems(items, noun, missing, required, unique, errors) {
+    var seen = {};
+    var i;
+    var item;
+    unique.forEach(function (rule) {
+      seen[rule.key] = {};
+    });
+    for (i = 0; i < items.length; i += 1) {
+      item = items[i];
+      if (!item || required.some(function (key) { return !item[key]; })) {
+        errors.push(noun + " " + (i + 1) + " saknar " + missing);
+        continue;
+      }
+      unique.forEach(function (rule) {
+        var value = item[rule.key];
+        if (seen[rule.key][value]) {
+          errors.push(rule.label + " \"" + value + "\" används mer än en gång.");
+        }
+        seen[rule.key][value] = true;
+      });
+    }
+    return errors;
+  }
+
+  function validateSlotTheme(theme) {
+    var errors = [];
+    checkBasics(theme, errors);
     var numbers = theme.numbers;
     if (!numbers || !isFinite(numbers.min) || !isFinite(numbers.max) || numbers.min < 1 || numbers.max < numbers.min ||
         Math.floor(numbers.min) !== numbers.min || Math.floor(numbers.max) !== numbers.max) {
@@ -75,21 +136,8 @@
       errors.push("Temat behöver minst 3 bilder.");
       return errors;
     }
-    var ids = {};
-    var i;
-    var symbol;
-    for (i = 0; i < theme.symbols.length; i += 1) {
-      symbol = theme.symbols[i];
-      if (!symbol || !symbol.id || !symbol.name || !symbol.image) {
-        errors.push("Bild " + (i + 1) + " saknar id, namn eller bild.");
-        continue;
-      }
-      if (ids[symbol.id]) {
-        errors.push("Id \"" + symbol.id + "\" används mer än en gång.");
-      }
-      ids[symbol.id] = true;
-    }
-    if (!errors.length && slotCombos(theme).length < CARD_CELLS) {
+    checkItems(theme.symbols, "Bild", "id, namn eller bild.", ["id", "name", "image"], [ID], errors);
+    if (!errors.length && theme.symbols.length * (numbers.max - numbers.min + 1) < CARD_CELLS) {
       errors.push("Temat ger färre än " + CARD_CELLS + " kombinationer av tal och bild.");
     }
     return errors;
@@ -106,39 +154,16 @@
     if (theme.pairs.length !== CARD_CELLS) {
       errors.push("Temat måste ha exakt " + CARD_CELLS + " bildpar, inte " + theme.pairs.length + ".");
     }
-    if (!theme.id || !theme.title || !theme.base) {
-      errors.push("Temat saknar id, namn eller sökväg till bilderna.");
+    checkBasics(theme, errors);
+    if (isCompound(theme)) {
+      return checkItems(theme.pairs, "Ordpar", "id, ord eller bild.",
+        ["id", "first", "second", "firstImage", "secondImage", "card", "cardImage"], [ID, CARD], errors);
     }
-    var calls = {};
-    var cards = {};
-    var ids = {};
-    var i;
-    var pair;
-    for (i = 0; i < theme.pairs.length; i += 1) {
-      pair = theme.pairs[i];
-      if (!pair || !pair.id || !pair.call || !pair.card || !pair.image || !pair.cardImage) {
-        errors.push("Bildpar " + (i + 1) + " saknar id, ord eller bild.");
-        continue;
-      }
-      if (ids[pair.id]) {
-        errors.push("Id \"" + pair.id + "\" används mer än en gång.");
-      }
-      if (calls[pair.call]) {
-        errors.push("Bildordet \"" + pair.call + "\" används mer än en gång.");
-      }
-      if (cards[pair.card]) {
-        errors.push("Brickordet \"" + pair.card + "\" används mer än en gång.");
-      }
-      ids[pair.id] = true;
-      calls[pair.call] = true;
-      cards[pair.card] = true;
-    }
-    return errors;
+    return checkItems(theme.pairs, "Bildpar", "id, ord eller bild.",
+      ["id", "call", "card", "image", "cardImage"], [ID, CALL, CARD], errors);
   }
 
   function makeCard(theme, seed) {
-    var cells = [];
-    var i;
     if (isSlot(theme)) {
       return {
         cells: seededShuffle(slotCombos(theme), seed).slice(0, CARD_CELLS).map(function (combo) {
@@ -146,15 +171,10 @@
         })
       };
     }
-    for (i = 0; i < theme.pairs.length; i += 1) {
-      cells.push({
-        key: theme.pairs[i].card,
-        word: theme.pairs[i].card,
-        image: theme.pairs[i].cardImage
-      });
-    }
     return {
-      cells: seededShuffle(cells, seed)
+      cells: seededShuffle(theme.pairs.map(function (pair) {
+        return { key: pair.card, word: pair.card, image: pair.cardImage };
+      }), seed)
     };
   }
 
@@ -163,6 +183,9 @@
     seededShuffle: seededShuffle,
     randomSeed: randomSeed,
     isSlot: isSlot,
+    isCompound: isCompound,
+    imagePath: imagePath,
+    themeImages: themeImages,
     slotCombos: slotCombos,
     validateTheme: validateTheme,
     makeCard: makeCard

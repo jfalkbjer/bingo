@@ -77,18 +77,38 @@
     return node;
   }
 
+  function noiseSource(c) {
+    var node = c.createBufferSource();
+    node.buffer = noiseBuffer(c);
+    node.loop = true;
+    return node;
+  }
+
+  // steps: [[time, value], ...]; the first step is set, the rest are ramped to linearly.
+  function envelope(param, steps) {
+    param.setValueAtTime(steps[0][1], steps[0][0]);
+    steps.slice(1).forEach(function (step) {
+      param.linearRampToValueAtTime(step[1], step[0]);
+    });
+  }
+
+  function startAll(sources, t0, end) {
+    sources.forEach(function (s) {
+      s.start(t0);
+      s.stop(end);
+    });
+    return sources;
+  }
+
   function theremin(c, out, t0, d) {
-    function glide(param, scale) {
-      param.setValueAtTime(380 * scale, t0);
-      param.linearRampToValueAtTime(620 * scale, t0 + d * 0.4);
-      param.linearRampToValueAtTime(420 * scale, t0 + d * 0.75);
-      param.linearRampToValueAtTime(520 * scale, t0 + d);
+    function glide(param) {
+      envelope(param, [[t0, 380], [t0 + d * 0.4, 620], [t0 + d * 0.75, 420], [t0 + d, 520]]);
     }
     var tone = osc(c, "sine", 380);
     var shimmer = osc(c, "sine", 380);
     shimmer.detune.value = 14;
-    glide(tone.frequency, 1);
-    glide(shimmer.frequency, 1);
+    glide(tone.frequency);
+    glide(shimmer.frequency);
     var lfo = osc(c, "sine", 4.5);
     var depth = gain(c, 25);
     lfo.connect(depth);
@@ -96,19 +116,14 @@
     depth.connect(shimmer.frequency);
     var shimmerLevel = gain(c, 0.6);
 
-    var air = c.createBufferSource();
-    air.buffer = noiseBuffer(c);
-    air.loop = true;
+    var air = noiseSource(c);
     var breath = filter(c, "bandpass", 380, 6);
-    glide(breath.frequency, 1);
+    glide(breath.frequency);
     var airLevel = gain(c, 0.5);
 
     var soft = filter(c, "lowpass", 1800, 0.7);
     var env = gain(c, 0);
-    env.gain.setValueAtTime(0, t0);
-    env.gain.linearRampToValueAtTime(0.18, t0 + 0.3);
-    env.gain.linearRampToValueAtTime(0.24, t0 + d * 0.5);
-    env.gain.linearRampToValueAtTime(0.12, t0 + d);
+    envelope(env.gain, [[t0, 0], [t0 + 0.3, 0.18], [t0 + d * 0.5, 0.24], [t0 + d, 0.12]]);
     tone.connect(soft);
     shimmer.connect(shimmerLevel).connect(soft);
     air.connect(breath).connect(airLevel).connect(soft);
@@ -123,16 +138,45 @@
     echo.connect(feedback).connect(echo);
     echo.connect(echoLevel).connect(out);
 
-    var sources = [tone, shimmer, lfo, air];
-    sources.forEach(function (s) {
-      s.start(t0);
-      s.stop(t0 + d + 0.3);
-    });
-    return sources;
+    return startAll([tone, shimmer, lfo, air], t0, t0 + d + 0.3);
+  }
+
+  function cardFlip(c, out, t0, d) {
+    var rustle = noiseSource(c);
+    var air = filter(c, "bandpass", 1800, 1);
+    envelope(air.frequency, [[t0, 2000], [t0 + d * 0.28, 1100], [t0 + d * 0.62, 640]]);
+    var airLevel = gain(c, 0);
+    envelope(airLevel.gain, [[t0, 0], [t0 + d * 0.06, 0.34], [t0 + d * 0.42, 0.2], [t0 + d * 0.7, 0]]);
+
+    var grain = noiseSource(c);
+    var lower = filter(c, "bandpass", 700, 0.7);
+    envelope(lower.frequency, [[t0, 900], [t0 + d * 0.5, 380]]);
+    var lowerLevel = gain(c, 0);
+    envelope(lowerLevel.gain, [[t0, 0], [t0 + d * 0.08, 0.14], [t0 + d * 0.55, 0]]);
+
+    var land = t0 + d * 0.5;
+    var snap = noiseSource(c);
+    var snapTone = filter(c, "bandpass", 1400, 1.4);
+    var snapLevel = gain(c, 0);
+    envelope(snapLevel.gain, [[land, 0], [land + d * 0.02, 0.28], [land + d * 0.16, 0]]);
+    var knock = osc(c, "sine", 170);
+    envelope(knock.frequency, [[land, 190], [land + d * 0.14, 80]]);
+    var knockLevel = gain(c, 0);
+    envelope(knockLevel.gain, [[land, 0], [land + d * 0.02, 0.1], [land + d * 0.16, 0]]);
+
+    var soft = filter(c, "lowpass", 2200, 0.7);
+    rustle.connect(air).connect(airLevel).connect(soft);
+    grain.connect(lower).connect(lowerLevel).connect(soft);
+    snap.connect(snapTone).connect(snapLevel).connect(soft);
+    knock.connect(knockLevel).connect(soft);
+    soft.connect(out);
+
+    return startAll([rustle, grain, snap, knock], t0, t0 + d);
   }
 
   var SOUNDS = {
-    halloween: theremin
+    halloween: theremin,
+    flip: cardFlip
   };
 
   function stop() {

@@ -7,13 +7,16 @@
       index: 0,
       revealed: -1,
       spin: null,
+      flip: null,
       drawnOpen: false,
       showWord: false,
       confirmReset: false,
-      confirmExit: false
+      confirmResetAt: 0,
+      confirmExit: false,
+      confirmExitAt: 0
     },
     print: {
-      countText: "24",
+      countText: "30",
       cards: [],
       showKey: false,
       confirmCreate: false,
@@ -26,6 +29,10 @@
   var MAX_CARDS = 60;
   var SPIN_NUMBER_MS = 1200;
   var SPIN_SYMBOL_MS = 1900;
+  var FLIP_MS = 600;
+  var FLIP_FIRST_AT = 0;
+  var FLIP_SECOND_AT = 900;
+  var FLIP_TOTAL_MS = FLIP_SECOND_AT + FLIP_MS;
   var COPY_ROWS = {
     1: [1],
     2: [2],
@@ -50,6 +57,10 @@
     return window.Bingo.isSlot(theme);
   }
 
+  function isCompound(theme) {
+    return window.Bingo.isCompound(theme);
+  }
+
   function reducedMotion() {
     return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
@@ -65,15 +76,28 @@
     return list[0] || null;
   }
 
-  function pictureSrc(theme, pair) {
-    return theme.base.replace(/\/?$/, "/") + pair.image;
+  function pictureSrc(theme, image) {
+    return window.Bingo.imagePath(theme, image);
   }
 
-  function preloadPicture(theme, pair) {
-    if (!theme || !pair) {
-      return;
+  function picture(theme, image, className, alt) {
+    return el("img", {
+      class: className,
+      src: pictureSrc(theme, image),
+      alt: alt || "",
+      draggable: "false"
+    });
+  }
+
+  function itemImages(theme, item) {
+    if (isCompound(theme)) {
+      return [item.firstImage, item.secondImage];
     }
-    var src = pictureSrc(theme, pair);
+    return [isSlot(theme) ? item.symbol.image : item.image];
+  }
+
+  function preloadPicture(theme, image) {
+    var src = pictureSrc(theme, image);
     if (preloaded[src]) {
       return;
     }
@@ -83,11 +107,33 @@
     preloaded[src] = img;
   }
 
+  function upper(text) {
+    return text.toLocaleUpperCase("sv");
+  }
+
+  function sortedBy(items, key) {
+    return items.slice().sort(function (a, b) {
+      return a[key].localeCompare(b[key], "sv");
+    });
+  }
+
   function cardsReadyText(count) {
+    if (!count) {
+      return "";
+    }
     if (count === 1) {
       return "1 bricka är klar.";
     }
     return count + " brickor är klara.";
+  }
+
+  function readyTheme() {
+    var theme = currentTheme();
+    return theme && !window.Bingo.validateTheme(theme).length ? theme : null;
+  }
+
+  function stopPropagation(event) {
+    event.stopPropagation();
   }
 
   function el(tag, attrs, children) {
@@ -95,7 +141,7 @@
     var key;
     if (attrs) {
       for (key in attrs) {
-        if (!Object.prototype.hasOwnProperty.call(attrs, key)) {
+        if (!Object.prototype.hasOwnProperty.call(attrs, key) || attrs[key] == null || attrs[key] === false) {
           continue;
         }
         if (key === "class") {
@@ -104,7 +150,7 @@
           node.textContent = attrs[key];
         } else if (key.indexOf("on") === 0 && typeof attrs[key] === "function") {
           node.addEventListener(key.slice(2).toLowerCase(), attrs[key]);
-        } else if (attrs[key] != null && attrs[key] !== false) {
+        } else {
           node.setAttribute(key, String(attrs[key]));
         }
       }
@@ -116,6 +162,17 @@
       node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
     });
     return node;
+  }
+
+  function button(className, focus, text, onclick, pressed) {
+    return el("button", {
+      class: className,
+      type: "button",
+      "data-focus": focus,
+      "aria-pressed": pressed == null ? null : String(pressed),
+      onclick: onclick,
+      text: text
+    });
   }
 
   function arrowIcon(direction) {
@@ -190,9 +247,7 @@
     if (list.length > 1) {
       var picker = el("label", { class: "theme-picker", text: "Tema" });
       var select = el("select", { id: "theme-select", "data-focus": "theme" });
-      list.slice().sort(function (a, b) {
-        return a.title.localeCompare(b.title, "sv");
-      }).forEach(function (item) {
+      sortedBy(list, "title").forEach(function (item) {
         var option = el("option", { value: item.id, text: item.title });
         if (theme && item.id === theme.id) {
           option.selected = true;
@@ -219,22 +274,14 @@
       wrap.appendChild(box);
     }
 
-    wrap.appendChild(el("div", { class: "actions" }, [
-      el("button", {
-        class: "button primary",
-        type: "button",
-        disabled: ready ? null : "disabled",
-        onclick: startShow,
-        text: "Visa bilder"
-      }),
-      el("button", {
-        class: "button",
-        type: "button",
-        disabled: ready ? null : "disabled",
-        onclick: openPrint,
-        text: "Skriv ut brickor"
-      })
-    ]));
+    var actions = [
+      button("button primary", null, "Visa bilder", startShow),
+      button("button", null, "Skriv ut brickor", openPrint)
+    ];
+    actions.forEach(function (action) {
+      action.disabled = !ready;
+    });
+    wrap.appendChild(el("div", { class: "actions" }, actions));
     if (theme && theme.hint) {
       wrap.appendChild(el("p", { class: "hint", text: theme.hint }));
     }
@@ -244,6 +291,7 @@
   function renderShow() {
     var theme = currentTheme();
     var slot = isSlot(theme);
+    var compound = isCompound(theme);
     var order = state.show.order;
     var index = state.show.index;
     var atEnd = index >= order.length;
@@ -256,49 +304,24 @@
       "aria-live": "polite",
       text: atEnd ? "Slut" : (index + 1) + " / " + order.length
     });
-    var wordButton = slot ? el("button", {
-      class: "ghost",
-      type: "button",
-      "data-focus": "drawn",
-      "aria-pressed": state.show.drawnOpen ? "true" : "false",
-      onclick: toggleDrawn,
-      text: state.show.drawnOpen ? "Stäng dragna" : "Dragna"
-    }) : el("button", {
-      class: "ghost",
-      type: "button",
-      "data-focus": "word",
-      "aria-pressed": state.show.showWord ? "true" : "false",
-      onclick: toggleWord,
-      text: state.show.showWord ? "Dölj ordet" : "Visa ordet"
-    });
-    var resetButton = el("button", {
-      class: "ghost",
-      type: "button",
-      "data-focus": "reset",
-      onclick: newRound,
-      text: state.show.confirmReset ? "Blanda om nu?" : "Ny omgång"
-    });
-    var exitButton = el("button", {
-      class: "ghost",
-      type: "button",
-      "data-focus": "exit",
-      onclick: leaveShow,
-      text: state.show.confirmExit ? "Avsluta?" : "Meny"
-    });
+    var drawnOpen = state.show.drawnOpen;
+    var showWord = state.show.showWord;
     var soundOn = !window.BingoSound.isMuted();
-    var soundButton = theme.sound ? el("button", {
-      class: "ghost",
-      type: "button",
-      "data-focus": "sound",
-      "aria-pressed": soundOn ? "true" : "false",
-      onclick: toggleSound,
-      text: soundOn ? "Ljud på" : "Ljud av"
-    }) : null;
-    screen.appendChild(el("header", { class: "topbar" }, [counter, el("div", { class: "top-actions" }, [soundButton, wordButton, resetButton, exitButton])]));
+    screen.appendChild(el("header", { class: "topbar" }, [counter, el("div", { class: "top-actions" }, [
+      theme.sound ? button("ghost", "sound", soundOn ? "Ljud på" : "Ljud av", toggleSound, soundOn) : null,
+      slot ?
+        button("ghost", "drawn", drawnOpen ? "Stäng dragna" : "Dragna", toggleDrawn, drawnOpen) :
+        button("ghost", "word", showWord ? "Dölj ordet" : "Visa ordet", toggleWord, showWord),
+      button("ghost", "reset", state.show.confirmReset ? "Blanda om nu?" : "Ny omgång", newRound),
+      button("ghost", "exit", state.show.confirmExit ? "Avsluta?" : "Meny", leaveShow)
+    ])]));
 
     var wordSlot = el("div", { class: "word-slot" });
-    if (!atEnd && state.show.showWord) {
-      wordSlot.appendChild(el("p", { class: "word-pill", text: current.call.toLocaleUpperCase("sv") }));
+    if (!atEnd && showWord) {
+      wordSlot.appendChild(el("p", {
+        class: "word-pill",
+        text: upper(compound ? current.first + " + " + current.second : current.call)
+      }));
     }
 
     var stageChildren = [];
@@ -309,12 +332,10 @@
       ]));
     } else if (slot) {
       stageChildren.push(renderSlotMachine(theme, current));
+    } else if (compound) {
+      stageChildren.push(renderFlipCards(theme, current));
     } else {
-      stageChildren.push(el("img", {
-        src: pictureSrc(theme, current),
-        alt: current.call,
-        draggable: "false"
-      }));
+      stageChildren.push(picture(theme, current.image, null, current.call));
     }
     if (!slot) {
       stageChildren.push(wordSlot);
@@ -324,7 +345,7 @@
 
     function stopAnd(action) {
       return function (event) {
-        event.stopPropagation();
+        stopPropagation(event);
         action();
       };
     }
@@ -358,43 +379,66 @@
 
     var row = el("div", { class: "history-row" });
     past.forEach(function (item) {
-      row.appendChild(el("div", { class: "thumb" }, [
-        el("img", {
-          src: pictureSrc(theme, slot ? item.symbol : item),
-          alt: "",
-          draggable: "false"
-        }),
-        slot ? el("span", { class: "badge", text: String(item.number) }) : null
-      ]));
+      var thumb = itemImages(theme, item).map(function (image) {
+        return picture(theme, image);
+      });
+      if (slot) {
+        thumb.push(el("span", { class: "badge", text: String(item.number) }));
+      }
+      row.appendChild(el("div", { class: compound ? "thumb is-pair" : "thumb" }, thumb));
     });
     var history = el("div", {
       class: "history",
-      "aria-label": "Redan visade bilder"
+      "aria-label": "Redan visade bilder",
+      onclick: stopPropagation
     }, [row]);
-    history.addEventListener("click", function (event) {
-      event.stopPropagation();
-    });
     screen.appendChild(history);
     if (slot) {
-      if (state.show.drawnOpen) {
+      if (drawnOpen) {
         screen.appendChild(renderDrawn(theme));
       }
       return screen;
     }
-    if (order[index + 1]) {
-      preloadPicture(theme, order[index + 1]);
-    }
-    if (order[index + 2]) {
-      preloadPicture(theme, order[index + 2]);
-    }
+    order.slice(index + 1, index + 3).forEach(function (item) {
+      itemImages(theme, item).forEach(function (image) {
+        preloadPicture(theme, image);
+      });
+    });
     return screen;
+  }
+
+  function renderFlipCards(theme, pair) {
+    var flip = state.show.flip;
+    var elapsed = flip ? Date.now() - flip.startedAt : 0;
+    return el("div", {
+      class: "flip-row",
+      role: "img",
+      "aria-label": flip ? "Korten vänds" : pair.first + " plus " + pair.second
+    }, [
+      renderFlipCard(theme, pair.firstImage, flip ? FLIP_FIRST_AT - elapsed : null),
+      el("span", { class: "flip-plus", text: "+" }),
+      renderFlipCard(theme, pair.secondImage, flip ? FLIP_SECOND_AT - elapsed : null)
+    ]);
+  }
+
+  function renderFlipCard(theme, image, delay) {
+    var flipping = delay !== null;
+    return el("div", {
+      class: flipping ? "flip-card is-flipping" : "flip-card is-open",
+      style: flipping ? "--flip-delay: " + delay + "ms; --flip-ms: " + FLIP_MS + "ms" : null
+    }, [
+      el("div", { class: "flip-inner" }, [
+        el("div", { class: "flip-cover" }, [el("span", { text: "?" })]),
+        el("div", { class: "flip-face" }, [picture(theme, image)])
+      ])
+    ]);
   }
 
   function renderSlotMachine(theme, combo) {
     var spin = state.show.spin;
     var elapsed = spin ? Date.now() - spin.startedAt : 0;
     var spinning = !!spin;
-    var machine = el("div", {
+    return el("div", {
       class: "slot-machine",
       role: "img",
       "aria-label": spinning ? "Hjulen snurrar" : combo.number + " " + combo.symbol.name
@@ -403,10 +447,9 @@
         return el("span", { class: String(value).length > 1 ? "reel-digit is-wide" : "reel-digit", text: String(value) });
       }),
       renderReel("reel-symbol", spinning ? spin.symbols : [combo.symbol], SPIN_SYMBOL_MS, elapsed, function (symbol) {
-        return el("img", { src: pictureSrc(theme, symbol), alt: "", draggable: "false" });
+        return picture(theme, symbol.image);
       })
     ]);
-    return machine;
   }
 
   function renderReel(kind, items, duration, elapsed, renderItem) {
@@ -466,11 +509,15 @@
     var theme = currentTheme();
     var index = state.show.index;
     var order = state.show.order;
-    if (!isSlot(theme) || index >= order.length || index <= state.show.revealed) {
+    if ((!isSlot(theme) && !isCompound(theme)) || index >= order.length || index <= state.show.revealed) {
       return;
     }
     if (reducedMotion()) {
       state.show.revealed = index;
+      return;
+    }
+    if (isCompound(theme)) {
+      startFlip();
       return;
     }
     var numbers = [];
@@ -481,8 +528,7 @@
     var target = order[index];
     var before = order[index - 1];
     var symbolIndex = theme.symbols.indexOf(target.symbol);
-    var token = spinToken + 1;
-    spinToken = token;
+    var token = nextToken();
     state.show.spin = {
       token: token,
       startedAt: Date.now(),
@@ -502,38 +548,83 @@
     if (theme.sound) {
       window.BingoSound.play(theme.sound, SPIN_SYMBOL_MS);
     }
-    window.setTimeout(function () {
-      if (state.view !== "show" || !state.show.spin || state.show.spin.token !== token) {
-        return;
-      }
+    afterAnimation(token, SPIN_SYMBOL_MS, function () {
       finishSpin();
       render();
-    }, SPIN_SYMBOL_MS);
+    });
+  }
+
+  function nextToken() {
+    spinToken += 1;
+    return spinToken;
+  }
+
+  function animating() {
+    return state.show.spin || state.show.flip;
+  }
+
+  function startFlip() {
+    var token = nextToken();
+    state.show.flip = { token: token, startedAt: Date.now() };
+    playFlipSound();
+    afterAnimation(token, FLIP_SECOND_AT, playFlipSound);
+    afterAnimation(token, FLIP_TOTAL_MS, function () {
+      finishSpin();
+      render();
+    });
+  }
+
+  function playFlipSound() {
+    var theme = currentTheme();
+    if (theme.sound) {
+      window.BingoSound.play(theme.sound, FLIP_MS);
+    }
+  }
+
+  function afterAnimation(token, ms, action) {
+    window.setTimeout(function () {
+      var active = animating();
+      if (state.view === "show" && active && active.token === token) {
+        action();
+      }
+    }, ms);
+  }
+
+  function clearAnimation() {
+    window.BingoSound.stop();
+    state.show.spin = null;
+    state.show.flip = null;
   }
 
   function finishSpin() {
-    if (!state.show.spin) {
+    if (!animating()) {
       return;
     }
-    window.BingoSound.stop();
-    state.show.spin = null;
+    clearAnimation();
     state.show.revealed = Math.max(state.show.revealed, state.show.index);
   }
 
   function stopSpin() {
-    window.BingoSound.stop();
-    state.show.spin = null;
-    spinToken += 1;
+    clearAnimation();
+    nextToken();
   }
 
   function toggleSound() {
     var theme = currentTheme();
     var spin = state.show.spin;
     window.BingoSound.setMuted(!window.BingoSound.isMuted());
-    if (spin && theme.sound && !window.BingoSound.isMuted()) {
-      var left = SPIN_SYMBOL_MS - (Date.now() - spin.startedAt);
-      if (left > 200) {
-        window.BingoSound.play(theme.sound, left);
+    if (theme.sound && !window.BingoSound.isMuted()) {
+      if (spin) {
+        var left = SPIN_SYMBOL_MS - (Date.now() - spin.startedAt);
+        if (left > 200) {
+          window.BingoSound.play(theme.sound, left);
+        }
+      } else if (state.show.flip) {
+        var elapsed = Date.now() - state.show.flip.startedAt;
+        var turning = elapsed < FLIP_MS || (elapsed >= FLIP_SECOND_AT && elapsed < FLIP_SECOND_AT + FLIP_MS);
+        if (turning) {
+          window.BingoSound.play(theme.sound, FLIP_MS);
+        }
       }
     }
     render();
@@ -563,8 +654,8 @@
         numberBox.appendChild(el("span", { class: "drawn-none", text: "Inga ännu" }));
       }
       list.appendChild(el("li", {}, [
-        el("img", { src: pictureSrc(theme, symbol), alt: "", draggable: "false" }),
-        el("span", { class: "drawn-name", text: symbol.name.toLocaleUpperCase("sv") }),
+        picture(theme, symbol.image),
+        el("span", { class: "drawn-name", text: upper(symbol.name) }),
         numberBox
       ]));
     });
@@ -572,43 +663,22 @@
       class: "drawn-panel",
       role: "dialog",
       "aria-modal": "true",
-      "aria-label": "Dragna"
+      "aria-label": "Dragna",
+      onclick: stopPropagation
     }, [
       el("h2", { text: "Dragna" }),
       el("p", { class: "drawn-count", text: drawn.length + " av " + state.show.order.length + " dragna" }),
       list,
-      el("button", {
-        class: "button primary",
-        type: "button",
-        "data-focus": "drawn-close",
-        onclick: closeDrawn,
-        text: "Fortsätt"
-      })
+      button("button primary", "drawn-close", "Fortsätt", closeDrawn)
     ]);
-    panel.addEventListener("click", function (event) {
-      event.stopPropagation();
-    });
-    var overlay = el("div", { class: "drawn-overlay" }, [panel]);
-    overlay.addEventListener("click", closeDrawn);
-    return overlay;
+    return el("div", { class: "drawn-overlay", onclick: closeDrawn }, [panel]);
   }
 
   function renderPrint() {
     var theme = currentTheme();
     var page = el("main", { class: "print-page" });
     var controls = el("div", { class: "no-print print-controls" });
-    controls.appendChild(el("button", {
-      class: "ghost",
-      type: "button",
-      "data-focus": "print-menu",
-      onclick: function () {
-        state.print.confirmCreate = false;
-        state.view = "menu";
-        render();
-        window.scrollTo(0, 0);
-      },
-      text: "Meny"
-    }));
+    controls.appendChild(button("ghost", "print-menu", "Meny", goToMenu));
     controls.appendChild(el("h1", { text: "Skriv ut brickor" }));
     if (theme.printLead) {
       controls.appendChild(el("p", { class: "lead", text: theme.printLead }));
@@ -632,48 +702,23 @@
     countLabel.appendChild(countInput);
     controls.appendChild(countLabel);
 
-    var actions = [
-      el("button", {
-        class: "button primary",
-        type: "button",
-        "data-focus": "create",
-        onclick: createCards,
-        text: createLabel()
-      }),
-      el("button", {
-        class: "button",
-        type: "button",
-        "data-focus": "print-cards",
-        disabled: state.print.cards.length ? null : "disabled",
-        onclick: printCards,
-        text: "Skriv ut brickor"
-      })
-    ];
-    if (!isSlot(theme)) {
-      actions.push(el("button", {
-        class: "button",
-        type: "button",
-        "data-focus": "key",
-        onclick: toggleKey,
-        text: state.print.showKey ? "Dölj lärarblad" : "Visa lärarblad"
-      }));
-      actions.push(el("button", {
-        class: "button",
-        type: "button",
-        "data-focus": "print-key",
-        onclick: printKey,
-        text: "Skriv ut lärarblad"
-      }));
-    }
-    controls.appendChild(el("div", { class: "actions" }, actions));
+    var slot = isSlot(theme);
+    var printCardsButton = button("button", "print-cards", "Skriv ut brickor", printCards);
+    printCardsButton.disabled = !state.print.cards.length;
+    controls.appendChild(el("div", { class: "actions" }, [
+      button("button primary", "create", createLabel(), createCards),
+      printCardsButton,
+      slot ? null : button("button", "key", state.print.showKey ? "Dölj lärarblad" : "Visa lärarblad", toggleKey),
+      slot ? null : button("button", "print-key", "Skriv ut lärarblad", printKey)
+    ]));
     controls.appendChild(el("p", {
       id: "cards-ready",
       class: "hint",
       "aria-live": "polite",
-      text: state.print.cards.length ? cardsReadyText(state.print.cards.length) : ""
+      text: cardsReadyText(state.print.cards.length)
     }));
     page.appendChild(controls);
-    if (!isSlot(theme)) {
+    if (!slot) {
       page.appendChild(renderKey(theme));
     }
     page.appendChild(renderCards(theme));
@@ -708,22 +753,19 @@
   }
 
   function renderCard(theme, card) {
+    var slot = isSlot(theme);
     var grid = el("div", { class: "grid" });
     card.cells.forEach(function (cell) {
-      if (isSlot(theme)) {
+      if (slot) {
         grid.appendChild(el("div", { class: "cell count-cell" }, [renderCopies(theme, cell)]));
         return;
       }
       grid.appendChild(el("div", { class: "cell" }, [
-        el("img", {
-          src: pictureSrc(theme, { image: cell.image }),
-          alt: "",
-          draggable: "false"
-        }),
-        el("span", { text: cell.word.toLocaleUpperCase("sv") })
+        picture(theme, cell.image),
+        el("span", { class: cell.word.length > 9 ? "is-long" : null, text: upper(cell.word) })
       ]));
     });
-    return el("article", { class: isSlot(theme) ? "bingo-card slot-card" : "bingo-card" }, [grid]);
+    return el("article", { class: slot ? "bingo-card slot-card" : "bingo-card" }, [grid]);
   }
 
   function copyRows(count) {
@@ -743,43 +785,47 @@
   function renderCopies(theme, cell) {
     var rows = copyRows(cell.count);
     var size = Math.max(rows.length, Math.max.apply(null, rows));
-    var src = pictureSrc(theme, { image: cell.image });
     var box = el("div", { class: "copies", style: "--m: " + size });
     rows.forEach(function (count) {
       var row = el("div", { class: "copies-row" });
       var i;
       for (i = 0; i < count; i += 1) {
-        row.appendChild(el("img", { src: src, alt: "", draggable: "false" }));
+        row.appendChild(picture(theme, cell.image));
       }
       box.appendChild(row);
     });
     return box;
   }
 
+  function keyCall(theme, image, word, joiner) {
+    return [
+      picture(theme, image),
+      el("span", { class: "call", text: upper(word) }),
+      el("span", { class: "to", text: joiner })
+    ];
+  }
+
   function renderKey(theme) {
-    var sheet = el("section", { class: state.print.showKey ? "key-sheet is-visible" : "key-sheet" });
-    sheet.appendChild(el("h2", { text: "Lärarblad · " + theme.title }));
-    sheet.appendChild(el("p", { text: "Till vänster är bilden du visar. Till höger är bilden och ordet på brickan." }));
-    var list = el("ul", { class: "key-list" });
-    var pairs = theme.pairs.slice().sort(function (a, b) {
-      return a.call.localeCompare(b.call, "sv");
+    var compound = isCompound(theme);
+    var list = el("ul", { class: compound ? "key-list key-compound" : "key-list" });
+    sortedBy(theme.pairs, compound ? "card" : "call").forEach(function (pair) {
+      var shown = compound ?
+        keyCall(theme, pair.firstImage, pair.first, "+").concat(keyCall(theme, pair.secondImage, pair.second, "=")) :
+        keyCall(theme, pair.image, pair.call, "→");
+      list.appendChild(el("li", {}, shown.concat([
+        picture(theme, pair.cardImage, "match"),
+        el("strong", { text: upper(pair.card) })
+      ])));
     });
-    pairs.forEach(function (pair) {
-      list.appendChild(el("li", {}, [
-        el("img", { src: pictureSrc(theme, pair), alt: "", draggable: "false" }),
-        el("span", { class: "call", text: pair.call.toLocaleUpperCase("sv") }),
-        el("span", { class: "to", text: "→" }),
-        el("img", {
-          class: "match",
-          src: pictureSrc(theme, { image: pair.cardImage }),
-          alt: "",
-          draggable: "false"
-        }),
-        el("strong", { text: pair.card.toLocaleUpperCase("sv") })
-      ]));
-    });
-    sheet.appendChild(list);
-    return sheet;
+    return el("section", { class: state.print.showKey ? "key-sheet is-visible" : "key-sheet" }, [
+      el("h2", { text: "Lärarblad · " + theme.title }),
+      el("p", {
+        text: compound ?
+          "Till vänster är de två bilderna du visar. Till höger är bilden och ordet på brickan." :
+          "Till vänster är bilden du visar. Till höger är bilden och ordet på brickan."
+      }),
+      list
+    ]);
   }
 
   function resetRound(theme) {
@@ -788,19 +834,18 @@
     state.show.index = 0;
     state.show.revealed = -1;
     state.show.drawnOpen = false;
-    state.show.confirmReset = false;
-    state.show.confirmExit = false;
+    clearConfirms();
     if (isSlot(theme)) {
       theme.symbols.forEach(function (symbol) {
-        preloadPicture(theme, symbol);
+        preloadPicture(theme, symbol.image);
       });
     }
     startSpinIfNeeded();
   }
 
   function startShow() {
-    var theme = currentTheme();
-    if (!theme || window.Bingo.validateTheme(theme).length) {
+    var theme = readyTheme();
+    if (!theme) {
       return;
     }
     state.show.showWord = false;
@@ -812,33 +857,43 @@
   function goToMenu() {
     stopSpin();
     state.show.drawnOpen = false;
+    state.print.confirmCreate = false;
     state.view = "menu";
     render();
     window.scrollTo(0, 0);
   }
 
-  function leaveShow() {
+  function clearConfirms() {
+    state.show.confirmReset = false;
+    state.show.confirmExit = false;
+  }
+
+  // A second click within CONFIRM_MS is ignored so a double-click can't confirm by accident.
+  function confirmTwice(key, action) {
     var now = Date.now();
-    if (!state.show.confirmExit) {
-      state.show.confirmExit = true;
-      state.show.confirmExitAt = now;
-      state.show.confirmReset = false;
+    if (!state.show[key]) {
+      clearConfirms();
+      state.show[key] = true;
+      state.show[key + "At"] = now;
       render();
       return;
     }
-    if (now - state.show.confirmExitAt < CONFIRM_MS) {
+    if (now - state.show[key + "At"] < CONFIRM_MS) {
       return;
     }
-    goToMenu();
+    action();
+  }
+
+  function leaveShow() {
+    confirmTwice("confirmExit", goToMenu);
   }
 
   function next() {
     if (state.view !== "show" || state.show.drawnOpen) {
       return;
     }
-    state.show.confirmReset = false;
-    state.show.confirmExit = false;
-    if (state.show.spin) {
+    clearConfirms();
+    if (animating()) {
       finishSpin();
       render();
       return;
@@ -859,8 +914,7 @@
     if (state.show.index > 0) {
       state.show.index -= 1;
     }
-    state.show.confirmReset = false;
-    state.show.confirmExit = false;
+    clearConfirms();
     render();
   }
 
@@ -871,8 +925,7 @@
     }
     finishSpin();
     state.show.drawnOpen = true;
-    state.show.confirmReset = false;
-    state.show.confirmExit = false;
+    clearConfirms();
     render();
     var close = document.querySelector('[data-focus="drawn-close"]');
     if (close) {
@@ -890,30 +943,19 @@
 
   function toggleWord() {
     state.show.showWord = !state.show.showWord;
-    state.show.confirmReset = false;
-    state.show.confirmExit = false;
+    clearConfirms();
     render();
   }
 
   function newRound() {
-    var now = Date.now();
-    if (!state.show.confirmReset) {
-      state.show.confirmReset = true;
-      state.show.confirmResetAt = now;
-      state.show.confirmExit = false;
+    confirmTwice("confirmReset", function () {
+      resetRound(currentTheme());
       render();
-      return;
-    }
-    if (now - state.show.confirmResetAt < CONFIRM_MS) {
-      return;
-    }
-    resetRound(currentTheme());
-    render();
+    });
   }
 
   function openPrint() {
-    var theme = currentTheme();
-    if (!theme || window.Bingo.validateTheme(theme).length) {
+    if (!readyTheme()) {
       return;
     }
     state.print.confirmCreate = false;
@@ -928,13 +970,7 @@
     if (input) {
       raw = input.value;
     }
-    var count = parseInt(raw, 10);
-    if (!count || count < 1) {
-      count = 1;
-    }
-    if (count > MAX_CARDS) {
-      count = MAX_CARDS;
-    }
+    var count = Math.min(MAX_CARDS, Math.max(1, parseInt(raw, 10) || 1));
     state.print.countText = String(count);
     if (input) {
       input.value = state.print.countText;
@@ -944,8 +980,8 @@
 
   function createCards() {
     var now = Date.now();
-    var theme = currentTheme();
-    if (!theme || window.Bingo.validateTheme(theme).length) {
+    var theme = readyTheme();
+    if (!theme) {
       return;
     }
     if (state.print.cards.length && !state.print.confirmCreate) {
@@ -1010,7 +1046,7 @@
     }
     var ready = document.getElementById("cards-ready");
     if (ready) {
-      ready.textContent = state.print.cards.length ? cardsReadyText(state.print.cards.length) : "";
+      ready.textContent = cardsReadyText(state.print.cards.length);
     }
     var create = document.querySelector('[data-focus="create"]');
     if (create) {
@@ -1052,14 +1088,16 @@
       return;
     }
     resizeCards(readCount());
-    document.body.classList.add("printing-cards");
-    document.body.classList.remove("printing-key");
-    window.print();
+    printOnly("cards");
   }
 
   function printKey() {
-    document.body.classList.add("printing-key");
-    document.body.classList.remove("printing-cards");
+    printOnly("key");
+  }
+
+  function printOnly(part) {
+    document.body.classList.toggle("printing-cards", part === "cards");
+    document.body.classList.toggle("printing-key", part === "key");
     window.print();
   }
 
@@ -1107,11 +1145,12 @@
         goToMenu();
         return;
       }
-      if (letter === "m" && currentTheme().sound) {
+      var theme = currentTheme();
+      if (letter === "m" && theme.sound) {
         toggleSound();
         return;
       }
-      if (isSlot(currentTheme())) {
+      if (isSlot(theme)) {
         if (letter === "d") {
           toggleDrawn();
         }
@@ -1123,8 +1162,7 @@
       return;
     }
     if (event.key === "Escape" && state.view === "print") {
-      state.view = "menu";
-      render();
+      goToMenu();
     }
   }
 
